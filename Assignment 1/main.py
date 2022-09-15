@@ -12,12 +12,6 @@ MU = 0.0
 def getValue(x_vals):
     return torch.tensor([math.cos(2 * math.pi * x) for x in x_vals])
 
-def getData(data_size, st_dev):
-    # Draw normal values first
-    normal_vals = numpy.random.normal(MU, st_dev, data_size)
-    # Return the (X,Y) tuples
-    return [getValue(random.random(), normal_vals[i]) for i in range(data_size)]
-
 
 def getDataTensor(data_size, st_dev):
     x_vals = torch.rand(data_size, requires_grad=True)
@@ -31,10 +25,11 @@ def getDataTensor(data_size, st_dev):
 def getMSE(dataset, theta):
     # Rewrite using torch
     x_vals, y_vals = dataset
+    # Convert x_values to a compatible vector to multiply with theta
     x_matrix = torch.tensor([[x ** i for i in range(len(theta))] for x in x_vals])
 
     loss = torch.pow(torch.sub(x_matrix.matmul(theta), y_vals), 2)
-    return sum(loss)/(len(dataset))
+    return sum(loss)/(len(x_vals))
 
 
 def getLoss(x, y, theta, degree):
@@ -42,7 +37,7 @@ def getLoss(x, y, theta, degree):
     return torch.sub(theta.matmul(loss), y) ** 2
 
 
-# We use mini-batched SGD, with default batch size of half the size of the dataset
+# We use regular Gradient Descent
 def fitData(degree, train_data, st_dev, iterations, learning_rate=0.01, batch_size=0.5):
     batch_size = batch_size or (len(train_data) // 2)
     degree = degree + 1
@@ -51,20 +46,36 @@ def fitData(degree, train_data, st_dev, iterations, learning_rate=0.01, batch_si
     # We add an extra degree for the constant term
     theta = torch.randn(degree, requires_grad=True)
 
-    # We then need to convert our x-value to a compatible vector
-
     for _ in range(iterations):
         loss = getMSE(train_data, theta)
         loss.backward()
 
-        print(theta.grad)
+        # Updating theta
+        theta = torch.tensor(theta - learning_rate*theta.grad, requires_grad=True)
 
     # Returns theta, e_in, e_out
-    # return theta, getMSE(train_data, theta), getMSE(getData(2000, st_dev), theta)
+    return theta, getMSE(train_data, theta), getMSE(getDataTensor(2000, st_dev), theta)
+
+
+def experiment(training_size, degree, variance):
+    st_dev = math.sqrt(variance)
+    theta_bar, e_in_bar, e_out_bar = 0, 0, 0
+
+    for _ in range(50):
+        training_data = getDataTensor(training_size, st_dev)
+        theta, e_in, e_out = fitData(10, train_data, 0.5, iterations=100, learning_rate=0.01, batch_size=0.5)
+
+        theta_bar = theta_bar + theta
+        e_in_bar = e_in_bar + e_in
+        e_out_bar = e_out_bar + e_out
+    theta_bar = theta_bar / 50
+    e_in_bar = e_in_bar / 50
+    e_out_bar = e_out_bar / 50
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    train_data = getDataTensor(10, 0.5)
+    train_data = getDataTensor(1000, 0.5)
 
-    fitData(1, train_data, 0.5, 10, learning_rate=0.01, batch_size=0.5)
+    theta, E_in, E_out = fitData(100, train_data, 0.5, iterations=100, learning_rate=0.01, batch_size=0.5)
+    print(theta, E_in, E_out, sep="\n")
