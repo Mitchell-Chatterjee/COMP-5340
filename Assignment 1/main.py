@@ -7,7 +7,7 @@ MU = 0.0
 NUMBER_OF_TRIALS = 50
 BATCH_SIZE = 50
 LARGE_DATA_SIZE = 1000
-ITERATIONS = 10
+ITERATIONS = 25
 cuda = torch.device('cuda')
 
 # Experiment constants
@@ -31,7 +31,9 @@ def getBatch(dataset, batch_size):
     if batch_size > len(x_vals):
         return x_vals, y_vals
 
-    p_mat = torch.randperm(batch_size)
+    # We take a random permutation matrix with values from 0 to len(x_vals)-1
+    # We then take only the first 0 to batch_size-1 entries
+    p_mat = torch.randperm(len(x_vals))[:batch_size]
     return torch.tensor([x_vals[i] for i in p_mat], device=cuda), torch.tensor([y_vals[i] for i in p_mat], device=cuda)
 
 
@@ -46,7 +48,7 @@ def getMSE(dataset, theta):
     return sum(loss)/(len(x_vals))
 
 
-# We use Stochastic Gradient Descent when the sample size is larger than 50
+# We use Mini-Batched Stochastic Gradient Descent when the sample size is larger than 50
 def fitData(degree, train_data, st_dev, iterations, learning_rate=0.01, batch_size=BATCH_SIZE):
 
     # Start with random theta
@@ -56,8 +58,10 @@ def fitData(degree, train_data, st_dev, iterations, learning_rate=0.01, batch_si
         # Compute the MSE
         dataset = getBatch(train_data, batch_size)
         loss = getMSE(dataset, theta)
+
         # Compute the gradient
         loss.backward()
+
         # Updating theta
         theta = torch.tensor(theta - learning_rate*theta.grad, requires_grad=True, device=cuda)
 
@@ -93,20 +97,19 @@ def experiment(training_size, degree, variance):
     return e_in_bar, e_out_bar, e_bias
 
 
-def plot(e_in_array, e_out_array, e_bias_array, x_values, x_label, title, ax):
-    ax.plot(x_values, e_in_array, 'g')
-    ax.plot(x_values, e_out_array, 'b')
-    ax.plot(x_values, e_bias_array, 'r')
+def plot(e_in_array, e_out_array, e_bias_array, x_values, x_label, title):
+    plt.plot(x_values, e_in_array, 'g')
+    plt.plot(x_values, e_out_array, 'b')
+    plt.plot(x_values, e_bias_array, 'r')
 
-    ax.set_xlabel(x_label)
-    ax.set_title(title)
+    plt.xlabel(x_label)
+    plt.title(title)
+    plt.legend(['E_in', 'E_out', 'E_bias'])
+
+    plt.show()
 
 
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
-    fig.suptitle('Experiment')
 
     variance_e_in, variance_e_out, variance_e_bias = [], [], []
     degree_e_in, degree_e_out, degree_e_bias = [], [], []
@@ -122,7 +125,7 @@ if __name__ == '__main__':
                 e_out_array.append(e_out_bar)
                 e_bias_array.append(e_bias)
 
-                # Plot 2: Increasing degree with maximal sample size
+                # Plot 2: Increasing degree with maximal sample size and minimal variance
                 if var == VARIANCES[0] and size == TRAINING_SET_SIZES[-1]:
                     degree_e_in.append(e_in_bar)
                     degree_e_out.append(e_out_bar)
@@ -134,19 +137,13 @@ if __name__ == '__main__':
                     variance_e_out.append(e_out_bar)
                     variance_e_bias.append(e_bias)
 
-            # Plot 1: Increasing sample size with maximal degree
+            # Plot 1: Increasing sample size with maximal degree and minimal variance
             if degree == 20 and var == VARIANCES[0]:
                 plot(e_in_array, e_out_array, e_bias_array, x_values=TRAINING_SET_SIZES,
                      x_label="Training Set Size",
-                     title=('Increasing sample size with degree %s and variance %s' % (degree, var)), ax=ax1)
+                     title=('Increasing sample size with degree %s and variance %s' % (degree, var)))
 
     plot(degree_e_in, degree_e_out, degree_e_bias, x_values=range(0,21), x_label="Model Complexity (Degree)",
-         title=('Increasing model complexity with sample size %s and variance %s' % (TRAINING_SET_SIZES[-1], VARIANCES[0])), ax=ax2)
+         title=('Increasing model complexity with sample size %s and variance %s' % (TRAINING_SET_SIZES[-1], VARIANCES[0])))
     plot(variance_e_in, variance_e_out, variance_e_bias, x_values=VARIANCES, x_label="Variance",
-         title=('Increasing variance with sample size %s and degree %s' % (TRAINING_SET_SIZES[-1], 20)), ax=ax3)
-
-    ax1.legend(['E_in', 'E_out', 'E_bias'])
-    ax2.legend(['E_in', 'E_out', 'E_bias'])
-    ax3.legend(['E_in', 'E_out', 'E_bias'])
-
-    plt.show()
+         title=('Increasing variance with sample size %s and degree %s' % (TRAINING_SET_SIZES[-1], 20)))
