@@ -103,6 +103,7 @@ def experiment(training_size, degree, variance):
 
 
 if __name__ == '__main__':
+    print(torch.cuda.get_device_name(0))
     variance_e_in, variance_e_out, variance_e_bias = [], [], []
     degree_e_in, degree_e_out, degree_e_bias = [], [], []
 
