@@ -46,7 +46,8 @@ class Network:
         self.B = [[random.random()] * dim] * dim
         self.C = [[random.random()] * dim] * dim
 
-        # Defining the neurons
+        # Defining the neurons.
+        # Each neuron has an operation, a set of input keys, and a label.
         self.y = Neuron(matrix_mult, ["A", "x"], "y")
         self.v = Neuron(matrix_mult, ["B", "x"], "v")
         self.u = Neuron(sigmoid, ["y"], "u")
@@ -72,12 +73,14 @@ class Network:
         return x
 
 
-# Note the first variable, is the variable we are taking the derivative wrt.
+# Note the first variable, we are taking the derivative wrt x.
 def derivative(x, y, operation):
-    if operation == "*":
+    if operation == matrix_mult:
         return y
-    if operation == "+":
-        return 1
+    elif operation == matrix_add:
+        return [1]*len(x)
+    elif operation == sigmoid:
+        return sigmoid_dv(x)
 
 
 def sigmoid(z):
@@ -89,7 +92,11 @@ def sigmoid(z):
 
 
 def sigmoid_dv(z):
-    return sigmoid(z)*(1-sigmoid(z))
+    rows_z, cols_z = len(z), len(z[0])
+    for i in range(rows_z):
+        for j in range(cols_z):
+            z[i][j] = sigmoid(z[i][j])*(1-sigmoid(z[i][j]))
+    return z
 
 
 # Assuming x is R^k and A, B, C are KxK
@@ -125,11 +132,24 @@ def matrix_add(inputs):
     return C
 
 
-if __name__ == '__main__':
-    x = [1, 2, 3]
+# This is the squared Euclidean Norm
+def calculate_loss(output):
+    return sum([elem ** 2 for elem in output])
 
-    network = Network(3)
-    print(network.forward(x))
+
+if __name__ == '__main__':
+    N = 5
+    data = []
+    for i in range(N):
+        data.append([random.randint(0, 10), random.randint(0, 10), random.randint(0, 10)])
+
+    network = Network(len(data[0]))
+    for x in data:
+        network.forward(x)
+
+    output = network.forward(data[0])
+    print(output)
+    print(calculate_loss(output['w']))
 
 
 
