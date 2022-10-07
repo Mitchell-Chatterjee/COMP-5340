@@ -11,32 +11,50 @@ class Neuron:
         # These are keys to a dictionary
         self.input_keys = input_keys
         self.label = label
+        self.upstream_grad = 0
 
-    def activate(self, x):
+    def activate(self, activation_dict):
         # Get the inputs from the dictionary
-        inputs = [x[key] for key in self.input_keys]
+        inputs = [activation_dict[key] for key in self.input_keys]
         # Calculate the activation using the inputs
         self.current_activation = self.operation(inputs)
         return self.current_activation
+
+    def local_gradient(self):
+        return 1
+
+    def error(self, activation_dict):
+        inputs = [activation_dict[key] for key in self.input_keys]
+
+        inputs[0].upstream = derivative(inputs, self.operation)
+        if len(inputs > 1):
+            inputs[1].upstream = derivative(inputs[::-1], self.operation)
+
 
 
 # A class to store neurons per layer
 class Layer:
     # We initialize the layer with all non-neuron inputs it may have
-    def __init__(self, neurons, inputs):
+    def __init__(self, neurons):
         self.neurons = neurons
         self.activations = {}
-        # These are standard input values that are not neurons
-        self.inputs = inputs
 
-    def calculate(self, prev_layer, input):
-        # Merge the two dictionaries and add the input
-        x = {**self.inputs, **prev_layer, "x": input}
-
+    def calculate(self, activation_dict):
         # Now calculate the values in this layer
         for neuron in self.neurons:
-            self.activations[neuron.label] = neuron.activate(x)
-        return self.activations
+            self.activations[neuron.label] = neuron.activate(activation_dict)
+        # Carry forward any values from the previous layer we may need
+        return {**activation_dict, **self.activations}
+
+    def error(self, activation_dict):
+        # Calculate the gradient here
+        # The gradient for the previous is calculated here
+        # The
+        for neuron in self.neurons:
+            neuron.input_keys
+            for
+
+        return 1
 
 
 class Network:
@@ -55,32 +73,48 @@ class Network:
         self.w = Neuron(matrix_mult, ["z", "C"], "w")
 
         # Defining layers
-        self.layer_1 = Layer([self.y], {"A": self.A})
-        self.layer_2 = Layer([self.u, self.v], {"B": self.B})
-        self.layer_3 = Layer([self.z], {})
-        self.layer_4 = Layer([self.w], {"C": self.C})
+        self.layer_1 = Layer([self.y, self.v])
+        self.layer_2 = Layer([self.u])
+        self.layer_3 = Layer([self.z])
+        self.layer_4 = Layer([self.w])
+
+        # Global weight and neuron matrix
+        self.activation_dict = {}
 
     def forward(self, input):
         # Add the output from each layer to a dictionary
-        # TODO: Issue with how inputs to each layer are used
         # We initialize the dictionary with the standard values
+        self.activation_dict = {"x": input, "A": self.A, "B": self.B, "C": self.C}
 
-        x = self.layer_1.calculate({}, input)
-        x = self.layer_2.calculate(x, input)
-        x = self.layer_3.calculate(x, input)
-        x = self.layer_4.calculate(x, input)
+        self.activation_dict = self.layer_1.calculate(self.activation_dict)
+        self.activation_dict = self.layer_2.calculate(self.activation_dict)
+        self.activation_dict = self.layer_3.calculate(self.activation_dict)
+        self.activation_dict = self.layer_4.calculate(self.activation_dict)
 
-        return x
+        return self.activation_dict['w']
+
+    def backward(self, loss):
+        # Initialize with the loss
+        # We take the loss with respect to it
+        self.activation_dict["loss"] = loss
+
+        # Upstream gradient * Local gradient gives the current value
+        self.layer_4.error(self.activation_dict)
+        self.layer_3.error(self.activation_dict)
+        self.layer_2.error(self.activation_dict)
+        self.layer_1.error(self.activation_dict)
 
 
 # Note the first variable, we are taking the derivative wrt x.
-def derivative(x, y, operation):
+def derivative(z, operation):
+    if len(z) > 1:
+        x, y = z
     if operation == matrix_mult:
         return y
     elif operation == matrix_add:
         return [1]*len(x)
     elif operation == sigmoid:
-        return sigmoid_dv(x)
+        return sigmoid_dv(z)
 
 
 def sigmoid(z):
@@ -141,15 +175,15 @@ if __name__ == '__main__':
     N = 5
     data = []
     for i in range(N):
-        data.append([random.randint(0, 10), random.randint(0, 10), random.randint(0, 10)])
+        data.append([random.randint(9, 10), random.randint(9, 10), random.randint(9, 10)])
 
     network = Network(len(data[0]))
-    for x in data:
-        network.forward(x)
+    # for x in data:
+    #     network.forward(x)
 
     output = network.forward(data[0])
     print(output)
-    print(calculate_loss(output['w']))
+    print(calculate_loss(output))
 
 
 
