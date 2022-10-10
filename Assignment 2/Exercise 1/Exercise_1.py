@@ -3,32 +3,61 @@ import math
 import random
 
 
+class Graph:
+    """Represents a computational graph
+    """
+
+    def __init__(self):
+        """Construct Graph"""
+        self.operations = []
+        self.placeholders = []
+        self.variables = []
+
+    def as_default(self):
+        global _default_graph
+        _default_graph = self
+
+
+class Placeholder:
+    """Represents a placeholder node that has to be provided with a value
+       when computing the output of a computational graph
+    """
+
+    def __init__(self):
+        """Construct placeholder
+        """
+        self.consumers = []
+
+        # Append this placeholder to the list of placeholders in the currently active default graph
+        _default_graph.placeholders.append(self)
+
+
+class Variable:
+    def __init__(self, initial_value = None):
+        self.value = initial_value
+        self.consumers = []
+
+        # Append this variable to the list of variables in the currently active default graph
+        _default_graph.variables.append(self)
+
+
 # We are assuming that neurons can be broken into two inputs each
-class Neuron:
-    def __init__(self, operation, input_keys, label):
+class Node:
+    def __init__(self, operation, input_nodes=[]):
         self.operation = operation
-        self.current_activation = 0
-        # These are keys to a dictionary
-        self.input_keys = input_keys
-        self.label = label
-        self.upstream_grad = 0
 
-    def activate(self, activation_dict):
-        # Get the inputs from the dictionary
-        inputs = [activation_dict[key] for key in self.input_keys]
-        # Calculate the activation using the inputs
-        self.current_activation = self.operation(inputs)
-        return self.current_activation
+        # Initialize list of consumers (i.e. nodes that receive this operation's output as input)
+        self.consumers = []
 
-    def local_gradient(self):
-        return 1
+        # Append this operation to the list of consumers of all input nodes
+        for input_node in input_nodes:
+            input_node.consumers.append(self)
 
-    def error(self, activation_dict):
-        inputs = [activation_dict[key] for key in self.input_keys]
+        # Append this operation to the list of operations in the currently active default graph
+        _default_graph.operations.append(self)
 
-        inputs[0].upstream = derivative(inputs, self.operation)
-        if len(inputs > 1):
-            inputs[1].upstream = derivative(inputs[::-1], self.operation)
+    def compute(self):
+        return self.operation(self.inputs)
 
 
 
@@ -42,79 +71,34 @@ class Layer:
     def calculate(self, activation_dict):
         # Now calculate the values in this layer
         for neuron in self.neurons:
-            self.activations[neuron.label] = neuron.activate(activation_dict)
+            self.activations[neuron.label] = neuron.compute(activation_dict)
         # Carry forward any values from the previous layer we may need
         return {**activation_dict, **self.activations}
 
-    def error(self, activation_dict):
+    def error(self, activation_dict, gradient_dict):
         # Calculate the gradient here
         # The gradient for the previous is calculated here
         # The
         for neuron in self.neurons:
-            neuron.input_keys
-            for
-
-        return 1
-
-
-class Network:
-    def __init__(self, dim):
-        # Initializing the weights
-        self.A = [[random.random()] * dim] * dim
-        self.B = [[random.random()] * dim] * dim
-        self.C = [[random.random()] * dim] * dim
-
-        # Defining the neurons.
-        # Each neuron has an operation, a set of input keys, and a label.
-        self.y = Neuron(matrix_mult, ["A", "x"], "y")
-        self.v = Neuron(matrix_mult, ["B", "x"], "v")
-        self.u = Neuron(sigmoid, ["y"], "u")
-        self.z = Neuron(matrix_add, ["u", "v"], "z")
-        self.w = Neuron(matrix_mult, ["z", "C"], "w")
-
-        # Defining layers
-        self.layer_1 = Layer([self.y, self.v])
-        self.layer_2 = Layer([self.u])
-        self.layer_3 = Layer([self.z])
-        self.layer_4 = Layer([self.w])
-
-        # Global weight and neuron matrix
-        self.activation_dict = {}
-
-    def forward(self, input):
-        # Add the output from each layer to a dictionary
-        # We initialize the dictionary with the standard values
-        self.activation_dict = {"x": input, "A": self.A, "B": self.B, "C": self.C}
-
-        self.activation_dict = self.layer_1.calculate(self.activation_dict)
-        self.activation_dict = self.layer_2.calculate(self.activation_dict)
-        self.activation_dict = self.layer_3.calculate(self.activation_dict)
-        self.activation_dict = self.layer_4.calculate(self.activation_dict)
-
-        return self.activation_dict['w']
-
-    def backward(self, loss):
-        # Initialize with the loss
-        # We take the loss with respect to it
-        self.activation_dict["loss"] = loss
-
-        # Upstream gradient * Local gradient gives the current value
-        self.layer_4.error(self.activation_dict)
-        self.layer_3.error(self.activation_dict)
-        self.layer_2.error(self.activation_dict)
-        self.layer_1.error(self.activation_dict)
+            neuron.error(activation_dict, gradient_dict)
 
 
 # Note the first variable, we are taking the derivative wrt x.
 def derivative(z, operation):
-    if len(z) > 1:
-        x, y = z
     if operation == matrix_mult:
+        x, y = z
         return y
     elif operation == matrix_add:
+        x, y = z
         return [1]*len(x)
     elif operation == sigmoid:
-        return sigmoid_dv(z)
+        return sigmoid_dv(z[0])
+    elif operation == squared:
+        return 2 * z[0]
+
+
+def squared(x):
+    return x * x
 
 
 def sigmoid(z):
@@ -136,6 +120,9 @@ def sigmoid_dv(z):
 # Assuming x is R^k and A, B, C are KxK
 def matrix_mult(inputs):
     A, B = inputs
+
+    # We may need to reshape them
+
     try:
         len(A[0])
     except: # swap if we have them in the wrong order
@@ -166,24 +153,40 @@ def matrix_add(inputs):
     return C
 
 
+def euclidean_norm(x):
+    return math.sqrt(sum([elem ** 2 for elem in x]))
+
+
 # This is the squared Euclidean Norm
 def calculate_loss(output):
     return sum([elem ** 2 for elem in output])
 
 
 if __name__ == '__main__':
-    N = 5
-    data = []
-    for i in range(N):
-        data.append([random.randint(9, 10), random.randint(9, 10), random.randint(9, 10)])
+    # N = 5
+    # data = []
+    # for i in range(N):
+    #     data.append([random.randint(9, 10), random.randint(9, 10), random.randint(9, 10)])
+    #
+    # network = Network(len(data[0]))
+    # # for x in data:
+    # #     network.forward(x)
 
-    network = Network(len(data[0]))
-    # for x in data:
-    #     network.forward(x)
+    # Create a new graph
+    Graph().as_default()
 
-    output = network.forward(data[0])
-    print(output)
-    print(calculate_loss(output))
+    # Create variables
+    A = Variable([[1, 0], [0, -1]])
+    b = Variable([1, 1])
+
+    # Create placeholder
+    x = Node([])
+
+    # Create hidden node y
+    y = matmul(A, x)
+
+    # Create output node z
+    z = add(y, b)
 
 
 
