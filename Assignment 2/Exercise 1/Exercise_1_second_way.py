@@ -97,13 +97,19 @@ def compute_gradients(loss):
 ########################################################
 
 
+def create_matrix(K):
+    C = []
+    for _ in range(K):
+        C.append([1] * K)
+    return C
+
 K = 3
 
 # Create a new graph
 graph = cpg.Graph().as_default()
 
 # Create variables
-A, B, C = cpg.Variable([[1]*K] * K), cpg.Variable([[1]*K] * K), cpg.Variable([[1]*K] * K)
+A, B, C = cpg.Variable(create_matrix(K)), cpg.Variable(create_matrix(K)), cpg.Variable(create_matrix(K))
 
 # Create placeholder
 x = cpg.UnsetNode()
@@ -123,11 +129,10 @@ Error = cpg.error(w)
 minimizer = GradientDescent(Error)
 
 activation_dict = {
-    x: [2] * K
+    x: [1] * K
 }
 
-for step in range(100):
+for step in range(50):
     loss = graph.forward(Error, activation_dict)
-    if step % 10 == 0:
-        print("Step:", step, " Loss:", loss)
+    print("Step:", step, " Loss:", loss[0][0])
     graph.backward(minimizer)

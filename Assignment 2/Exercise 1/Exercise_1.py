@@ -4,11 +4,7 @@ import random
 
 
 class Graph:
-    """Represents a computational graph
-    """
-
     def __init__(self):
-        """Construct Graph"""
         self.operations = []
         self.placeholders = []
         self.variables = []
@@ -19,13 +15,7 @@ class Graph:
 
 
 class Placeholder:
-    """Represents a placeholder node that has to be provided with a value
-       when computing the output of a computational graph
-    """
-
     def __init__(self):
-        """Construct placeholder
-        """
         self.consumers = []
 
         # Append this placeholder to the list of placeholders in the currently active default graph
@@ -58,7 +48,6 @@ class Node:
 
     def compute(self):
         return self.operation(self.inputs)
-
 
 
 # A class to store neurons per layer

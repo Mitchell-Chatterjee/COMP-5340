@@ -12,6 +12,10 @@ def getRowsAndCols(a):
     return rows, cols
 
 
+def convertListToMatrix(a):
+    return [[elem] for elem in a]
+
+
 def transpose(a):
     rows, cols = getRowsAndCols(a)
     z = []
@@ -54,18 +58,27 @@ class add(Node):
 
     # Assuming x and y are the same size
     def compute(self, x_value, y_value):
-        rows, cols = getRowsAndCols(x_value)
-        z = [0] * rows
+        rows_x, cols_x = getRowsAndCols(x_value)
+        rows_y, cols_y = getRowsAndCols(y_value)
 
-        if cols == 0:
-            for i in range(rows):
-                z[i] = x_value[i] + y_value[i]
-        else:
-            z = [[0] * rows] * cols
-            for i in range(rows):
-                for j in range(cols):
-                    z[i][j] = x_value[i][j] + y_value[i][j]
-        return z
+        # Convert a list to a matrix
+        if cols_x == 0:
+            x_value = convertListToMatrix(x_value)
+        if cols_y == 0:
+            y_value = convertListToMatrix(y_value)
+
+        rows_x, cols_x = getRowsAndCols(x_value)
+        rows_y, cols_y = getRowsAndCols(y_value)
+
+        # Build new matrix
+        C = []
+        for _ in range(rows_x):
+            C.append([0] * cols_x)
+
+        for i in range(rows_x):
+            for j in range(cols_x):
+                C[i][j] = x_value[i][j] + y_value[i][j]
+        return C
 
     def gradient(self, grad):
         return [grad, grad]
@@ -76,7 +89,8 @@ class error(Node):
         super().__init__([w])
 
     def compute(self, w):
-        return w.dot(w)
+        return w.T.dot(w)
+        # return matmul.compute(self, transpose(w), w)
 
     # Gradient of the loss wrt to the loss is 1
     def gradient(self, grad):
@@ -89,23 +103,39 @@ class matmul(Node):
         super().__init__([a, b])
 
     def compute(self, a_value, b_value):
-        rows_a, cols_a = getRowsAndCols(a_value)
-        rows_b, cols_b = getRowsAndCols(b_value)
+        return a_value.dot(b_value)
 
-        C = [0] * rows_a
-
-        if cols_a != rows_b:
-            b_value = transpose(b_value)
-            rows_b, cols_b = getRowsAndCols(b_value)
-
-        if cols_b == 0:
-            for i in range(rows_a):
-                for j in range(rows_b):
-                    C[j] += a_value[i][j] * b_value[j]
-        return C
+    # def compute(self, a_value, b_value):
+    #     rows_a, cols_a = getRowsAndCols(a_value)
+    #     rows_b, cols_b = getRowsAndCols(b_value)
+    #
+    #     # Convert a list to a matrix
+    #     if cols_a == 0:
+    #         a_value = convertListToMatrix(a_value)
+    #     if cols_b == 0:
+    #         b_value = convertListToMatrix(b_value)
+    #
+    #     rows_a, cols_a = getRowsAndCols(a_value)
+    #     rows_b, cols_b = getRowsAndCols(b_value)
+    #
+    #     if cols_a != rows_b:
+    #         b_value = transpose(b_value)
+    #         rows_b, cols_b = getRowsAndCols(b_value)
+    #
+    #     # Build new matrix
+    #     C = []
+    #     for _ in range(rows_a):
+    #         C.append([0] * cols_b)
+    #
+    #     for i in range(rows_a):
+    #         for j in range(cols_b):
+    #             for k in range(rows_b):
+    #                 C[i][j] += a_value[i][k] * b_value[k][j]
+    #     return C
 
     def gradient(self, grad):
-        grad = np.array(grad)
+        if type(grad) != np.array:
+            grad = np.array(grad)
 
         A = self.inputs[0]
         B = self.inputs[1]
@@ -119,15 +149,17 @@ class sigmoid(Node):
         super().__init__([z])
 
     def compute(self, z):
-        rows, cols = getRowsAndCols(z)
+        rows_z, cols_z = getRowsAndCols(z)
 
-        if cols == 0:
-            for i in range(rows):
-                z[i] = 1.0 / (1.0 + math.exp(-z[i]))
-        else:
-            for i in range(rows):
-                for j in range(cols):
-                    z[i][j] = 1.0 / (1.0 + math.exp(-z[i][j]))
+        # Convert a list to a matrix
+        if cols_z == 0:
+            z = convertListToMatrix(z)
+
+        rows_z, cols_z = getRowsAndCols(z)
+
+        for i in range(rows_z):
+            for j in range(cols_z):
+                z[i][j] = 1.0 / (1.0 + math.exp(-z[i][j]))
         return z
 
     def gradient(self, grad):
@@ -199,7 +231,3 @@ def traverse_postorder(node, postorder_traversal):
         for val in node.input_nodes:
             traverse_postorder(val, postorder_traversal)
     postorder_traversal.append(node)
-
-
-a = [[1, 2, 3], [1, 2, 3]]
-print(transpose(a))
