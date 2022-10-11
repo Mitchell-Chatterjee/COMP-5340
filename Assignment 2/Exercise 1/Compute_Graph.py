@@ -83,13 +83,26 @@ class error(Node):
         return 1
 
 
-# Computes matrix multiplications
+# Assuming x is R^k and A, B, C are KxK
 class matmul(Node):
     def __init__(self, a, b):
         super().__init__([a, b])
 
     def compute(self, a_value, b_value):
-        return a_value.dot(b_value)
+        rows_a, cols_a = getRowsAndCols(a_value)
+        rows_b, cols_b = getRowsAndCols(b_value)
+
+        C = [0] * rows_a
+
+        if cols_a != rows_b:
+            b_value = transpose(b_value)
+            rows_b, cols_b = getRowsAndCols(b_value)
+
+        if cols_b == 0:
+            for i in range(rows_a):
+                for j in range(rows_b):
+                    C[j] += a_value[i][j] * b_value[j]
+        return C
 
     def gradient(self, grad):
         grad = np.array(grad)
@@ -106,7 +119,16 @@ class sigmoid(Node):
         super().__init__([z])
 
     def compute(self, z):
-        return 1 / (1 + np.exp(-z))
+        rows, cols = getRowsAndCols(z)
+
+        if cols == 0:
+            for i in range(rows):
+                z[i] = 1.0 / (1.0 + math.exp(-z[i]))
+        else:
+            for i in range(rows):
+                for j in range(cols):
+                    z[i][j] = 1.0 / (1.0 + math.exp(-z[i][j]))
+        return z
 
     def gradient(self, grad):
         sigmoid = self.output
