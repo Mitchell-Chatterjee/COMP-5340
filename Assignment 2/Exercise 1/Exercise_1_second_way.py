@@ -1,127 +1,140 @@
-# Nodes
-class Node:
-    def __init__(self, input_nodes=[]):
-        self.input_nodes = input_nodes
+import Compute_Graph as cpg
+import random
+import numpy as np
+from queue import Queue
 
-        # Initialize list of consumers (i.e. nodes that receive this operation's output as input)
-        self.consumers = []
+'''
+Note this work was largely aided by the following links.
 
-        # Append this operation to the list of consumers of all input nodes
-        for input_node in input_nodes:
-            input_node.consumers.append(self)
+https://pytorch.org/tutorials/beginner/blitz/autograd_tutorial.html
+https://pytorch.org/tutorials/beginner/basics/autogradqs_tutorial.html
+https://pytorch.org/blog/computational-graphs-constructed-in-pytorch/
+https://www.codingame.com/playgrounds/9487/deep-learning-from-scratch---theory-and-implementation/
+'''
 
-        # Append this operation to the list of nodes in the currently active default graph
-        _default_graph.nodes.append(self)
+################### Gradient Descent ###################
+LEARNING_RATE = 0.01
+
+
+class GradientDescent(cpg.Node):
+    def __init__(self, error):
+        super().__init__([error])
 
     def compute(self):
-        pass
+        # Compute gradients
+        gradient_table = compute_gradients(self.input_nodes[0])
+
+        # Iterate all variables
+        for node in gradient_table:
+            if type(node) == cpg.Variable:
+                # Retrieve gradient for this variable
+                grad = gradient_table[node]
+
+                # Take a step in the negative direction of the gradient
+                node.value -= LEARNING_RATE * grad
+
+########################################################
 
 
-# Computes matrix additions
-class add(Node):
-    def __init__(self, x, y):
-        super().__init__([x, y])
-
-    def compute(self, x_value, y_value):
-        return x_value + y_value
+################ Backprop ##############################
 
 
-# Computes matrix multiplications
-class matmul(Node):
-    def __init__(self, a, b):
-        super().__init__([a, b])
+def compute_gradients(loss):
+    # gradient_table[node] will contain the gradient of the loss w.r.t. the node's output
+    gradient_table = {}
 
-    def compute(self, a_value, b_value):
-        return a_value.dot(b_value)
+    # The gradient of the loss with respect to the loss is just 1
+    gradient_table[loss] = 1
 
+    # Perform a breadth-first search, backwards from the loss
+    visited = set()
+    queue = Queue()
+    visited.add(loss)
+    queue.put(loss)
 
-class UnsetNode:
-    def __init__(self):
-        self.consumers = []
-        
-        _default_graph.unsetNodes.append(self)
+    while not queue.empty():
+        node = queue.get()
 
+        # We do not compute on the loss
+        if node != loss:
+            #
+            # Compute the gradient of the loss with respect to this node's output
+            #
+            gradient_table[node] = 0
 
-# Input variables
-class Variable:
-    def __init__(self, initial_value=None):
-        self.value = initial_value
-        self.consumers = []
+            # Iterate all consumers
+            for consumer in node.consumers:
 
-        _default_graph.variables.append(self)
+                # Retrieve the gradient of the loss w.r.t. consumer's output
+                lossgrad_wrt_consumer_output = gradient_table[consumer]
 
+                # Get the gradient of the loss with respect to all of consumer's inputs
+                lossgrads_wrt_consumer_inputs = consumer.gradient(lossgrad_wrt_consumer_output)
 
-class Graph:
-    def __init__(self):
-        self.nodes = []
-        self.unsetNodes = []
-        self.variables = []
+                if len(consumer.input_nodes) == 1:
+                    # If there is a single input node to the consumer, lossgrads_wrt_consumer_inputs is a scalar
+                    gradient_table[node] += lossgrads_wrt_consumer_inputs
 
-    def as_default(self):
-        global _default_graph
-        _default_graph = self
+                else:
+                    # Otherwise, lossgrads_wrt_consumer_inputs is an array of gradients for each input node
 
+                    # Retrieve the index of node in consumer's inputs
+                    node_index_in_consumer_inputs = consumer.input_nodes.index(node)
 
-import numpy as np
+                    # Get the gradient of the loss with respect to node
+                    lossgrad_wrt_node = lossgrads_wrt_consumer_inputs[node_index_in_consumer_inputs]
 
+                    # Add to total gradient
+                    gradient_table[node] += lossgrad_wrt_node
 
-class Session:
-    def forward(self, last_node, activation_dict={}):
-        # Post order traversal gives us the correct execution sequence of the nodes
-        postorder_traversal = []
-        traverse_postorder(last_node, postorder_traversal)
+        #
+        # Append each input node to the queue
+        #
+        if hasattr(node, "input_nodes"):
+            for input_node in node.input_nodes:
+                if not input_node in visited:
+                    visited.add(input_node)
+                    queue.put(input_node)
 
-        # Iterate all nodes to determine their value
-        for node in postorder_traversal:
-
-            if type(node) == UnsetNode:
-                # Set the value to the value from activation_dict
-                node.output = activation_dict[node]
-            elif type(node) == Variable:
-                # Set the node value to the variable's value attribute
-                node.output = node.value
-            else:  # Node
-                # Get the input values for this operation from the output values of the input nodes
-                node.inputs = [input_node.output for input_node in node.input_nodes]
-
-                # Compute the output of this operation
-                node.output = node.compute(*node.inputs)
-
-            # Convert lists to numpy arrays
-            if type(node.output) == list:
-                node.output = np.array(node.output)
-
-        # Return the requested node value
-        return last_node.output
+    # Return gradients for each visited node
+    return gradient_table
+########################################################
 
 
-def traverse_postorder(node, postorder_traversal):
-    if isinstance(node, Node):
-        for val in node.input_nodes:
-            traverse_postorder(val, postorder_traversal)
-    postorder_traversal.append(node)
-
+K = 3
 
 # Create a new graph
-Graph().as_default()
+graph = cpg.Graph().as_default()
 
 # Create variables
-A = Variable([[1, 0], [0, -1]])
-b = Variable([1, 1])
+A, B, C = cpg.Variable([[1]*K] * K), cpg.Variable([[1]*K] * K), cpg.Variable([[1]*K] * K)
 
 # Create placeholder
-x = UnsetNode()
+x = cpg.UnsetNode()
 
-# Create hidden node y
-y = matmul(A, x)
+# Create hidden node y, u, v and z
+y = cpg.matmul(A, x)
+u = cpg.sigmoid(y)
+v = cpg.matmul(B, x)
+z = cpg.add(u, v)
 
-# Create output node z
-z = add(y, b)
+# Create output node w
+w = cpg.matmul(C, z)
 
-session = Session()
-output = session.forward(z, {
-    x: [1, 2]
-})
-print(output)
+# This is the loss
+Error = cpg.error(w)
 
-# Continue work from here: https://www.codingame.com/playgrounds/9487/deep-learning-from-scratch---theory-and-implementation/gradient-descent-and-backpropagation
+minimizer = GradientDescent(Error)
+
+activation_dict = {
+    x: [2] * K
+}
+
+# loss = session.forward(Error, activation_dict)
+# backward = session.forward(minimizer, activation_dict)
+
+for step in range(100):
+    loss = graph.forward(Error, activation_dict)
+    if step % 10 == 0:
+        print("Step:", step, " Loss:", loss)
+    graph.backward(minimizer)
