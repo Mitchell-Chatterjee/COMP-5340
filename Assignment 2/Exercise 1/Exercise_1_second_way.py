@@ -57,9 +57,7 @@ def compute_gradients(loss):
 
         # We do not compute on the loss
         if node != loss:
-            #
             # Compute the gradient of the loss with respect to this node's output
-            #
             gradient_table[node] = 0
 
             # Iterate all consumers
@@ -87,9 +85,7 @@ def compute_gradients(loss):
                     # Add to total gradient
                     gradient_table[node] += lossgrad_wrt_node
 
-        #
         # Append each input node to the queue
-        #
         if hasattr(node, "input_nodes"):
             for input_node in node.input_nodes:
                 if not input_node in visited:
@@ -129,9 +125,6 @@ minimizer = GradientDescent(Error)
 activation_dict = {
     x: [2] * K
 }
-
-# loss = session.forward(Error, activation_dict)
-# backward = session.forward(minimizer, activation_dict)
 
 for step in range(100):
     loss = graph.forward(Error, activation_dict)

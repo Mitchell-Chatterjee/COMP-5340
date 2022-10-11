@@ -2,6 +2,37 @@ import math
 import numpy as np
 
 
+def getRowsAndCols(a):
+    rows, cols = len(a), 0
+    try:
+        cols = len(a[0])
+    except:
+        pass
+
+    return rows, cols
+
+
+def transpose(a):
+    rows, cols = getRowsAndCols(a)
+    z = []
+    for _ in range(rows):
+        z.append([0])
+
+    if cols == 0:
+        for i in range(rows):
+            z[i][0] = a[i]
+    else:
+        z = []
+        for i in range(cols):
+            z.append([0]*rows)
+
+        for i in range(rows):
+            for j in range(cols):
+                z[j][i] = a[i][j]
+
+    return z
+
+
 # Computational nodes
 class Node:
     def __init__(self, input_nodes=[]):
@@ -23,7 +54,18 @@ class add(Node):
 
     # Assuming x and y are the same size
     def compute(self, x_value, y_value):
-        return x_value + y_value
+        rows, cols = getRowsAndCols(x_value)
+        z = [0] * rows
+
+        if cols == 0:
+            for i in range(rows):
+                z[i] = x_value[i] + y_value[i]
+        else:
+            z = [[0] * rows] * cols
+            for i in range(rows):
+                for j in range(cols):
+                    z[i][j] = x_value[i][j] + y_value[i][j]
+        return z
 
     def gradient(self, grad):
         return [grad, grad]
@@ -135,3 +177,7 @@ def traverse_postorder(node, postorder_traversal):
         for val in node.input_nodes:
             traverse_postorder(val, postorder_traversal)
     postorder_traversal.append(node)
+
+
+a = [[1, 2, 3], [1, 2, 3]]
+print(transpose(a))
