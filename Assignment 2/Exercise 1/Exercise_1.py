@@ -1,189 +1,153 @@
-import torch
-import math
-import random
+import Compute_Graph as cpg
+from queue import Queue
+import matplotlib.pyplot as plt
+
+'''
+Note this work was largely aided by the following links.
+
+https://pytorch.org/tutorials/beginner/blitz/autograd_tutorial.html
+https://pytorch.org/tutorials/beginner/basics/autogradqs_tutorial.html
+https://pytorch.org/blog/computational-graphs-constructed-in-pytorch/
+https://www.codingame.com/playgrounds/9487/deep-learning-from-scratch---theory-and-implementation/
+'''
+
+################### Gradient Descent ###################
+LEARNING_RATE = 0.01
 
 
-class Graph:
-    def __init__(self):
-        self.operations = []
-        self.placeholders = []
-        self.variables = []
-
-    def as_default(self):
-        global _default_graph
-        _default_graph = self
-
-
-class Placeholder:
-    def __init__(self):
-        self.consumers = []
-
-        # Append this placeholder to the list of placeholders in the currently active default graph
-        _default_graph.placeholders.append(self)
-
-
-class Variable:
-    def __init__(self, initial_value = None):
-        self.value = initial_value
-        self.consumers = []
-
-        # Append this variable to the list of variables in the currently active default graph
-        _default_graph.variables.append(self)
-
-
-# We are assuming that neurons can be broken into two inputs each
-class Node:
-    def __init__(self, operation, input_nodes=[]):
-        self.operation = operation
-
-        # Initialize list of consumers (i.e. nodes that receive this operation's output as input)
-        self.consumers = []
-
-        # Append this operation to the list of consumers of all input nodes
-        for input_node in input_nodes:
-            input_node.consumers.append(self)
-
-        # Append this operation to the list of operations in the currently active default graph
-        _default_graph.operations.append(self)
+class GradientDescent(cpg.Node):
+    def __init__(self, error):
+        super().__init__([error])
 
     def compute(self):
-        return self.operation(self.inputs)
+        # Compute gradients
+        gradient_table = compute_gradients(self.input_nodes[0])
+
+        # Iterate all variables
+        for node in gradient_table:
+            if type(node) == cpg.Variable:
+                # Retrieve gradient for this variable
+                grad = gradient_table[node]
+
+                # Take a step in the negative direction of the gradient
+                node.value -= LEARNING_RATE * grad
+
+########################################################
 
 
-# A class to store neurons per layer
-class Layer:
-    # We initialize the layer with all non-neuron inputs it may have
-    def __init__(self, neurons):
-        self.neurons = neurons
-        self.activations = {}
-
-    def calculate(self, activation_dict):
-        # Now calculate the values in this layer
-        for neuron in self.neurons:
-            self.activations[neuron.label] = neuron.compute(activation_dict)
-        # Carry forward any values from the previous layer we may need
-        return {**activation_dict, **self.activations}
-
-    def error(self, activation_dict, gradient_dict):
-        # Calculate the gradient here
-        # The gradient for the previous is calculated here
-        # The
-        for neuron in self.neurons:
-            neuron.error(activation_dict, gradient_dict)
+################ Backprop ##############################
 
 
-# Note the first variable, we are taking the derivative wrt x.
-def derivative(z, operation):
-    if operation == matrix_mult:
-        x, y = z
-        return y
-    elif operation == matrix_add:
-        x, y = z
-        return [1]*len(x)
-    elif operation == sigmoid:
-        return sigmoid_dv(z[0])
-    elif operation == squared:
-        return 2 * z[0]
+def compute_gradients(loss):
+    # gradient_table[node] will contain the gradient of the loss w.r.t. the node's output
+    gradient_table = {}
+
+    # The gradient of the loss with respect to the loss is just 1
+    gradient_table[loss] = 1
+
+    # Perform a breadth-first search, backwards from the loss
+    visited = set()
+    queue = Queue()
+    visited.add(loss)
+    queue.put(loss)
+
+    while not queue.empty():
+        node = queue.get()
+
+        # We do not compute on the loss
+        if node != loss:
+            # Compute the gradient of the loss with respect to this node's output
+            gradient_table[node] = 0
+
+            # Iterate all consumers
+            for consumer in node.consumers:
+
+                # Retrieve the gradient of the loss w.r.t. consumer's output
+                lossgrad_wrt_consumer_output = gradient_table[consumer]
+
+                # Get the gradient of the loss with respect to all of consumer's inputs
+                lossgrads_wrt_consumer_inputs = consumer.gradient(lossgrad_wrt_consumer_output)
+
+                if len(consumer.input_nodes) == 1:
+                    # If there is a single input node to the consumer, lossgrads_wrt_consumer_inputs is a scalar
+                    gradient_table[node] += lossgrads_wrt_consumer_inputs
+
+                else:
+                    # Otherwise, lossgrads_wrt_consumer_inputs is an array of gradients for each input node
+
+                    # Retrieve the index of node in consumer's inputs
+                    node_index_in_consumer_inputs = consumer.input_nodes.index(node)
+
+                    # Get the gradient of the loss with respect to node
+                    lossgrad_wrt_node = lossgrads_wrt_consumer_inputs[node_index_in_consumer_inputs]
+
+                    # Add to total gradient
+                    gradient_table[node] += lossgrad_wrt_node
+
+        # Append each input node to the queue
+        if hasattr(node, "input_nodes"):
+            for input_node in node.input_nodes:
+                if not input_node in visited:
+                    visited.add(input_node)
+                    queue.put(input_node)
+
+    # Return gradients for each visited node
+    return gradient_table
+########################################################
 
 
-def squared(x):
-    return x * x
-
-
-def sigmoid(z):
-    rows_z , cols_z = len(z), len(z[0])
-    for i in range(rows_z):
-        for j in range(cols_z):
-            z[i][j] = 1.0/(1.0+math.exp(-z[i][j]))
-    return z
-
-
-def sigmoid_dv(z):
-    rows_z, cols_z = len(z), len(z[0])
-    for i in range(rows_z):
-        for j in range(cols_z):
-            z[i][j] = sigmoid(z[i][j])*(1-sigmoid(z[i][j]))
-    return z
-
-
-# Assuming x is R^k and A, B, C are KxK
-def matrix_mult(inputs):
-    A, B = inputs
-
-    # We may need to reshape them
-
-    try:
-        len(A[0])
-    except: # swap if we have them in the wrong order
-        A, B = B, A
-
-    rows_a, cols_a = len(A), len(A[0])
-    rows_b = len(B)
-
-    # Assume that we are always passing them in the correct order. No swapping.
-    if cols_a != rows_b:
-        raise Exception('Incompatible matrices.')
-
-    C = [0]*rows_a
-    for i in range(rows_a):
-        for j in range(rows_b):
-            C[j] += A[i][j] * B[j]
+def create_matrix(K):
+    C = []
+    for _ in range(K):
+        C.append([1] * K)
     return C
 
+K = 3
 
-def matrix_add(inputs):
-    A, B = inputs
-    rows_a, cols_a = len(A), len(A[0])
+# Create a new graph
+graph = cpg.Graph().as_default()
 
-    C = [0] * cols_a
-    for i in range(rows_a):
-        for j in range(cols_a):
-            C[j] = A[i][j] + B[j]
-    return C
+# Create variables
+A, B, C = cpg.Variable(create_matrix(K)), cpg.Variable(create_matrix(K)), cpg.Variable(create_matrix(K))
 
+# Create placeholder
+x = cpg.UnsetNode()
 
-def euclidean_norm(x):
-    return math.sqrt(sum([elem ** 2 for elem in x]))
+# Create hidden node y, u, v and z
+y = cpg.matmul(A, x)
+u = cpg.sigmoid(y)
+v = cpg.matmul(B, x)
+z = cpg.add(u, v)
 
+# Create output node w
+w = cpg.matmul(C, z)
 
-# This is the squared Euclidean Norm
-def calculate_loss(output):
-    return sum([elem ** 2 for elem in output])
+# This is the loss
+Error = cpg.error(w)
 
+minimizer = GradientDescent(Error)
 
-if __name__ == '__main__':
-    # N = 5
-    # data = []
-    # for i in range(N):
-    #     data.append([random.randint(9, 10), random.randint(9, 10), random.randint(9, 10)])
-    #
-    # network = Network(len(data[0]))
-    # # for x in data:
-    # #     network.forward(x)
-
-    # Create a new graph
-    Graph().as_default()
-
-    # Create variables
-    A = Variable([[1, 0], [0, -1]])
-    b = Variable([1, 1])
-
-    # Create placeholder
-    x = Node([])
-
-    # Create hidden node y
-    y = matmul(A, x)
-
-    # Create output node z
-    z = add(y, b)
+activation_dict = {
+    x: [1] * K
+}
 
 
+loss_values = []
+for step in range(50):
+    loss = graph.forward(Error, activation_dict)
+    print("Step:", step, " Loss:", loss[0][0])
+    graph.backward(minimizer)
+    loss_values.append(loss[0][0])
 
-    # Test code for matrix mult
-    # A = [[1, 2, 3],
-    #      [1, 2, 3]]
-    # B = [[1, 2, 3, 4],
-    #      [1, 2, 3, 4],
-    #      [1, 2, 3, 4]]
-    #
-    # print(matrix_mult(A, B))
+# Plot results
+plt.plot(range(50), loss_values, label='My implementation')
+
+# Add a legend
+plt.legend()
+
+# Add labels
+plt.xlabel("Epoch Number")
+plt.ylabel("Training Loss (0-100)")
+
+# Show the plot
+plt.show()
