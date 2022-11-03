@@ -1,7 +1,7 @@
 import torch
 
 
-def projected_gradient_descent(model, x, y, loss_fn, num_steps, step_size, epsilon,
+def projected_gradient_descent(model, x, y, loss_fn, num_steps, step_size, epsilon, delta,
                                clamp=(0, 1), y_target=None):
 
     # Step 1: Perturb the elements in the batch
@@ -9,14 +9,14 @@ def projected_gradient_descent(model, x, y, loss_fn, num_steps, step_size, epsil
     targeted = y_target is not None
 
     # This creates a tensor of the same size as x_hat with values (-epsilon, +epsilon)
-    delta = (epsilon * (-2)) * torch.rand(x_hat.shape[0], x_hat.shape[1]) + epsilon
+    delta = (epsilon * (-2)) * delta + epsilon
     x_hat = torch.add(x_hat, delta)
 
     for i in range(num_steps):
         # Step 2: Update x_hat
         x_old = x_hat.clone().detach().requires_grad_(True)
 
-        prediction = model(x_hat)
+        prediction = model(x_old)
         loss = loss_fn(prediction, y_target if targeted else y)
         loss.backward()
 
