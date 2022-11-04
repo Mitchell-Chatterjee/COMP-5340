@@ -80,7 +80,7 @@ if __name__ == "__main__":
         # We either train the model or load it from memory if it has already been trained
         if os.path.exists(path):
             # Load the model
-            model.load_state_dict(torch.load(PATH))
+            model.load_state_dict(torch.load(path))
             model.eval()
         else:
             model = train(model, train_loader, CUDA, device, num_steps=setting.num_steps,
@@ -94,8 +94,10 @@ if __name__ == "__main__":
     test_step_size = 0.01
     test_num_steps = 40
     test_radii = (0, 0.1, 0.2, 0.3, 0.45)
+    image_flag = True
     for model in models:
         test(model=model, CUDA=CUDA, device=device, test_loader=test_loader,
-             num_steps=test_num_steps, step_size=test_step_size, test_radii=test_radii)
+             num_steps=test_num_steps, step_size=test_step_size, test_radii=test_radii, image_flag=image_flag)
+        image_flag = False
 
     print('Finished Testing')

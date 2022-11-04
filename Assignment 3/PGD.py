@@ -168,44 +168,49 @@ def train(net, train_loader, CUDA, device, num_steps=1, step_size=0.02, epsilon=
     return net
 
 
-def test(model, CUDA, device, test_loader, num_steps, step_size, test_radii):
+def test(model, CUDA, device, test_loader, num_steps, step_size, test_radii, image_flag):
     loss_fn = nn.CrossEntropyLoss()
 
     Test_Accuracy_Adv = []
     Test_Accuracy_Adv_Targeted = []
 
-    with torch.no_grad():
-        for test_eps in test_radii:
-            # This part calculates the training accuracy and training loss on the original training images
-            correct_adv, correct_adv_targeted = 0, 0
-            total = 0
-            for images, labels in test_loader:
-                # Perturb the images
-                # Regular loss
-                with torch.no_grad():
-                    reg_outputs = model(images)
+    for test_eps in test_radii:
+        # This part calculates the training accuracy and training loss on the original training images
+        correct_adv, correct_adv_targeted = 0, 0
+        total = 0
+        for images, labels in test_loader:
+            if CUDA:
+                images = images.cuda()
+                labels = labels.cuda()
+            else:
+                images = images.cpu()
+                labels = labels.cpu()
+            # Regular loss
+            reg_outputs = model(images)
 
-                    # Get the second most likely label if this is a targeted attack
-                    _, second_prediction = torch.kthvalue(reg_outputs.data, reg_outputs.shape[1] - 1, dim=1)
+            # Get the second most likely label if this is a targeted attack
+            _, second_prediction = torch.kthvalue(reg_outputs.data, reg_outputs.shape[1] - 1, dim=1)
 
-                x_adv = projected_gradient_descent(model, images, labels, loss_fn, num_steps=num_steps, step_size=step_size,
-                                                   epsilon=test_eps, delta=torch.rand(images.shape, device=device),
-                                                   y_target=None)
-                x_adv_targeted = projected_gradient_descent(model, images, labels, loss_fn, num_steps=num_steps,
-                                                            step_size=step_size, epsilon=test_eps,
-                                                            delta=torch.rand(images.shape, device=device),
-                                                            y_target=second_prediction)
-
+            # Perturb the images
+            x_adv = projected_gradient_descent(model, images, labels, loss_fn, num_steps=num_steps, step_size=step_size,
+                                               epsilon=test_eps, delta=torch.rand(images.shape, device=device),
+                                               y_target=None)
+            x_adv_targeted = projected_gradient_descent(model, images, labels, loss_fn, num_steps=num_steps,
+                                                        step_size=step_size, epsilon=test_eps,
+                                                        delta=torch.rand(images.shape, device=device),
+                                                        y_target=second_prediction)
+            with torch.no_grad():
                 # TODO: show some examples
+                # If this is the first time through this loop, let's show a picture
+                if image_flag and correct_adv == 0:
+                    show_image(x_adv[1], x_adv_targeted[1], second_prediction[1].data.item(), test_eps, num_steps, step_size)
 
                 if CUDA:
                     x_adv = x_adv.cuda()
                     x_adv_targeted = x_adv_targeted.cuda()
-                    labels = labels.cuda()
                 else:
                     x_adv = x_adv.cpu()
                     x_adv_targeted = x_adv_targeted.cpu()
-                    labels = labels.cpu()
 
                 outputs_adv = model(x_adv)
                 outputs_adv_targeted = model(x_adv_targeted)
@@ -220,10 +225,10 @@ def test(model, CUDA, device, test_loader, num_steps, step_size, test_radii):
                 else:
                     correct_adv += (predicted_adv == labels).sum().item()
                     correct_adv_targeted += (predicted_adv_targeted == labels).sum().item()
-            Test_Accuracy_Adv.append(round(100 * correct_adv / total, 3));
-            Test_Accuracy_Adv_Targeted.append(round(100 * correct_adv_targeted / total, 3))
+        Test_Accuracy_Adv.append(round(100 * correct_adv / total, 3));
+        Test_Accuracy_Adv_Targeted.append(round(100 * correct_adv_targeted / total, 3))
 
-        plot_testing_results()
+    plot_testing_results(test_radii, Test_Accuracy_Adv, Test_Accuracy_Adv_Targeted)
 
 
 def plot_training_results(epoch_number, training_loss_regular, training_loss_perturbed, training_accuracy_regular, training_accuracy_perturbed):
@@ -278,4 +283,32 @@ def plot_testing_results(test_radii, Test_Accuracy_Adv, Test_Accuracy_Adv_Target
     plt.ylabel("Training Accuracy")
 
     # Show the plot
+    plt.show()
+
+
+def show_image(x_adv, x_adv_targeted, target_label, test_eps, num_steps, step_size):
+    temp_x_adv = x_adv[0].cpu()
+    temp_x_adv_targeted = x_adv_targeted[0].cpu()
+
+    # create figure
+    txt = f"test_eps={test_eps}, num_steps={num_steps}, step_size={step_size}"
+    fig = plt.figure(figsize=(10, 7))
+    plt.figtext(0.5, 0.01, txt, wrap=True, horizontalalignment='center', fontsize=12)
+
+    # setting values to rows and column variables
+    rows = 1
+    cols = 2
+
+    # Adds a subplot at the 1st position
+    fig.add_subplot(rows, cols, 1)
+    plt.imshow(temp_x_adv, cmap='gray')
+    plt.axis('off')
+    plt.title("Non-Targeted")
+
+    # Adds a subplot at the 2nd position
+    fig.add_subplot(rows, cols, 2)
+    plt.imshow(temp_x_adv_targeted, cmap='gray')
+    plt.axis('off')
+    plt.title(f"Targeted={target_label}")
+
     plt.show()
