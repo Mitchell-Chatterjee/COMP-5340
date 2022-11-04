@@ -6,6 +6,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from PGD import projected_gradient_descent
 
+PATH = "first.pt"
+
 
 class ConvNet(nn.Module):
     def __init__(self):
@@ -37,15 +39,16 @@ if __name__ == "__main__":
     trainset = torchvision.datasets.MNIST(root='./data', train=True,
                                           download=True, transform=transform)
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=25,
-                                               shuffle=True, num_workers=1)
+                                               shuffle=True, num_workers=4)
 
     testset = torchvision.datasets.MNIST(root='./data', train=False,
                                          download=True, transform=transform)
     test_loader = torch.utils.data.DataLoader(testset, batch_size=100,
-                                              shuffle=True, num_workers=1)
+                                              shuffle=True, num_workers=4)
     print("Done importing data.")
 
     net = ConvNet()
+
     CUDA=torch.cuda.is_available()
     if CUDA:
         net.cuda()
@@ -63,8 +66,10 @@ if __name__ == "__main__":
 
     loss_fn = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-    accuracy_values=[]
     epoch_number=[]
+
+    # Place to store the adversarial data
+    perturbed_data = None
 
     # Training loss and accuracy arrays
     training_loss_regular = []
@@ -75,7 +80,6 @@ if __name__ == "__main__":
     for epoch in range(10):  # loop over the dataset multiple times. Here 10 means 10 epochs
         running_loss_adv = 0.0
         running_loss_reg = 0.0
-        perturbed_data = torch.empty()
 
         # This is the training loop
         for i, (inputs,labels) in enumerate(train_loader, 0):
@@ -91,7 +95,10 @@ if __name__ == "__main__":
                                                step_size=0.02, epsilon=0.3, delta=torch.rand(inputs.shape, device=device))
 
             # Append the perturbed data for later use in testing
-            perturbed_data.cat(x_adv)
+            if perturbed_data is not None:
+                perturbed_data = torch.cat((perturbed_data, x_adv), 0)
+            else:
+                perturbed_data = x_adv
 
             # zero the parameter gradients
             optimizer.zero_grad()
@@ -113,16 +120,15 @@ if __name__ == "__main__":
             running_loss_reg += loss_reg.item()
 
         # print statistics
-        print('[epoch%d] adversarial loss: %.3f' %
-              (epoch + 1, running_loss_adv / len(inputs)))
         print('[epoch%d] regular loss: %.3f' %
               (epoch + 1, running_loss_reg / len(inputs)))
+        print('[epoch%d] adversarial loss: %.3f' %
+              (epoch + 1, running_loss_adv / len(inputs)))
 
-        correct = 0
-        total = 0
-
-        # This part calculates the training accuracy and training loss on the original training images
         with torch.no_grad():
+            # This part calculates the training accuracy and training loss on the original training images
+            correct = 0
+            total = 0
             for images, labels in train_loader:
                 if CUDA:
                   images = images.cuda()
@@ -138,17 +144,42 @@ if __name__ == "__main__":
                   correct += (predicted.cpu()==labels.cpu()).sum().item()
                 else:
                   correct += (predicted==labels).sum().item()
-
             Train_Accuracy_Reg = 100 * correct / total;
+
+            # TODO: Fix this adversarial training
+            # # This part calculates the training accuracy and training loss on the perturbed training images
+            # correct = 0
+            # total = 0
+            # images, labels = perturbed_data, trainset.train_labels
+            # if CUDA:
+            #   images = images.cuda()
+            #   labels = labels.cuda()
+            # else:
+            #   images = images.cpu()
+            #   labels =labels.cpu()
+            #
+            # outputs = net(images)
+            # _, predicted = torch.max(outputs.data, 1)
+            # if CUDA:
+            #   correct = (predicted.cpu()==labels.cpu()).sum().item()
+            # else:
+            #   correct = (predicted==labels).sum().item()
+            # Train_Accuracy_Adv = 100 * correct / perturbed_data.shape[0];
+            #
             epoch_number += [epoch+1]
-            accuracy_values += [Train_Accuracy_Reg]
             print('Epoch=%d Training Accuracy Regular=%.3f' %
                       (epoch + 1, Train_Accuracy_Reg))
+            # print('Epoch=%d Training Accuracy Adversarial=%.3f' %
+            #       (epoch + 1, Train_Accuracy_Adv))
 
         # Record the training losses and accuracies in an array
         training_loss_regular.append(round(running_loss_reg / len(inputs), 3))
         training_loss_perturbed.append(round(running_loss_adv / len(inputs), 3))
         training_accuracy_regular.append(Train_Accuracy_Reg)
-        training_accuracy_perturbed.append()
+        # TODO: Fix this adversarial training
+        # training_accuracy_perturbed.append(Train_Accuracy_Adv)
 
     print('Finished Training')
+
+    # Save the model
+    torch.save(net.state_dict(), PATH)
