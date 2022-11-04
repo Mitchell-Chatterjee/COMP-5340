@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import matplotlib.pyplot as plt
 
 
 def projected_gradient_descent(model, x, y, loss_fn, num_steps, step_size, epsilon, delta,
@@ -167,8 +168,65 @@ def train(net, train_loader, CUDA, device, num_steps=1, step_size=0.02, epsilon=
     return net
 
 
+def test(model, CUDA, device, test_loader, num_steps, step_size, test_radii):
+    loss_fn = nn.CrossEntropyLoss()
+
+    Test_Accuracy_Adv = []
+    Test_Accuracy_Adv_Targeted = []
+
+    with torch.no_grad():
+        for test_eps in test_radii:
+            # This part calculates the training accuracy and training loss on the original training images
+            correct_adv, correct_adv_targeted = 0, 0
+            total = 0
+            for images, labels in test_loader:
+                # Perturb the images
+                # Regular loss
+                with torch.no_grad():
+                    reg_outputs = model(images)
+
+                    # Get the second most likely label if this is a targeted attack
+                    _, second_prediction = torch.kthvalue(reg_outputs.data, reg_outputs.shape[1] - 1, dim=1)
+
+                x_adv = projected_gradient_descent(model, images, labels, loss_fn, num_steps=num_steps, step_size=step_size,
+                                                   epsilon=test_eps, delta=torch.rand(images.shape, device=device),
+                                                   y_target=None)
+                x_adv_targeted = projected_gradient_descent(model, images, labels, loss_fn, num_steps=num_steps,
+                                                            step_size=step_size, epsilon=test_eps,
+                                                            delta=torch.rand(images.shape, device=device),
+                                                            y_target=second_prediction)
+
+                # TODO: show some examples
+
+                if CUDA:
+                    x_adv = x_adv.cuda()
+                    x_adv_targeted = x_adv_targeted.cuda()
+                    labels = labels.cuda()
+                else:
+                    x_adv = x_adv.cpu()
+                    x_adv_targeted = x_adv_targeted.cpu()
+                    labels = labels.cpu()
+
+                outputs_adv = model(x_adv)
+                outputs_adv_targeted = model(x_adv_targeted)
+
+                _, predicted_adv = torch.max(outputs_adv.data, 1)
+                _, predicted_adv_targeted = torch.max(outputs_adv_targeted.data, 1)
+
+                total += labels.size(0)
+                if CUDA:
+                    correct_adv += (predicted_adv.cpu() == labels.cpu()).sum().item()
+                    correct_adv_targeted += (predicted_adv_targeted.cpu() == labels.cpu()).sum().item()
+                else:
+                    correct_adv += (predicted_adv == labels).sum().item()
+                    correct_adv_targeted += (predicted_adv_targeted == labels).sum().item()
+            Test_Accuracy_Adv.append(round(100 * correct_adv / total, 3));
+            Test_Accuracy_Adv_Targeted.append(round(100 * correct_adv_targeted / total, 3))
+
+        plot_testing_results()
+
+
 def plot_training_results(epoch_number, training_loss_regular, training_loss_perturbed, training_accuracy_regular, training_accuracy_perturbed):
-    import matplotlib.pyplot as plt
 
     '''
     ################## Plotting the Training Loss ##################
@@ -198,6 +256,25 @@ def plot_training_results(epoch_number, training_loss_regular, training_loss_per
 
     # Add labels
     plt.xlabel("Epoch Number")
+    plt.ylabel("Training Accuracy")
+
+    # Show the plot
+    plt.show()
+
+
+def plot_testing_results(test_radii, Test_Accuracy_Adv, Test_Accuracy_Adv_Targeted):
+    '''
+    ################## Plotting the Testing Accuracy ##################
+    '''
+    # Plot the data
+    plt.plot(test_radii, Test_Accuracy_Adv, label='Test_Acc_Adv', marker='o')
+    plt.plot(test_radii, Test_Accuracy_Adv_Targeted, label='Test_Acc_Adv_Targeted', marker='o')
+
+    # Add a legend
+    plt.legend()
+
+    # Add labels
+    plt.xlabel("Epsilon Values")
     plt.ylabel("Training Accuracy")
 
     # Show the plot

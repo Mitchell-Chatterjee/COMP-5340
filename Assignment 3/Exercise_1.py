@@ -4,7 +4,7 @@ import torch
 import torchvision
 import torch.nn as nn
 import torch.nn.functional as F
-from PGD import train
+from PGD import train, test
 
 
 PATH = ["first.pt", "second.pt", "third.pt"]
@@ -91,4 +91,11 @@ if __name__ == "__main__":
 
     # Evaluate the model
     print("\n\n\n**************Testing Phase**************")
+    test_step_size = 0.01
+    test_num_steps = 40
+    test_radii = (0, 0.1, 0.2, 0.3, 0.45)
+    for model in models:
+        test(model=model, CUDA=CUDA, device=device, test_loader=test_loader,
+             num_steps=test_num_steps, step_size=test_step_size, test_radii=test_radii)
+
     print('Finished Testing')
