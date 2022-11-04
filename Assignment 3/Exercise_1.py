@@ -1,12 +1,21 @@
 # Loading datasets
+import os
 import torch
 import torchvision
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
-from PGD import projected_gradient_descent
+from PGD import train
 
-PATH = "first.pt"
+
+PATH = ["first.pt", "second.pt", "third.pt"]
+
+
+class PGDSettings:
+    def __init__(self, num_steps, eps, step_size, targeted=False):
+        self.num_steps = num_steps
+        self.eps = eps
+        self.step_size = step_size
+        self.targeted = targeted
 
 
 class ConvNet(nn.Module):
@@ -16,20 +25,21 @@ class ConvNet(nn.Module):
         self.pool = nn.MaxPool2d(kernel_size=2)
         self.conv2 = nn.Conv2d(16, 32, 5, stride=1, padding=2)
         self.fc1 = nn.Linear(32 * 7 * 7, 120)
-        self.fc2 = nn.Linear(120, 120)
-        self.fc3 = nn.Linear(120, 10)
+        self.fc2 = nn.Linear(120, 10)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = x.view(-1, 32 * 7 * 7)
         x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = self.fc2(x)
         return x
 
 
 if __name__ == "__main__":
+    pgd_settings = [PGDSettings(num_steps=20, eps=0.3, step_size=0.02),
+                    PGDSettings(num_steps=1, eps=0.3, step_size=0.5),
+                    PGDSettings(num_steps=20, eps=0.3, step_size=0.02, targeted=True)]
     print(ConvNet())
 
     transform = torchvision.transforms.Compose(
@@ -47,11 +57,12 @@ if __name__ == "__main__":
                                               shuffle=True, num_workers=4)
     print("Done importing data.")
 
-    net = ConvNet()
+    models = [ConvNet() for _ in range(3)]
 
     CUDA=torch.cuda.is_available()
     if CUDA:
-        net.cuda()
+        for model in models:
+            model.cuda()
 
     # Let's first define our device as the first visible cuda device if we have
     # CUDA available:
@@ -61,125 +72,23 @@ if __name__ == "__main__":
     print(device)
     print(torch.cuda.get_device_name(device=device))
 
-    # 4. Train the network
+    # Train the network
     print("\n\n\n**************Training Phase**************")
-
-    loss_fn = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-    epoch_number=[]
-
-    # Place to store the adversarial data
-    perturbed_data = None
-
-    # Training loss and accuracy arrays
-    training_loss_regular = []
-    training_loss_perturbed = []
-    training_accuracy_regular = []
-    training_accuracy_perturbed = []
-
-    for epoch in range(10):  # loop over the dataset multiple times. Here 10 means 10 epochs
-        running_loss_adv = 0.0
-        running_loss_reg = 0.0
-
-        # This is the training loop
-        for i, (inputs,labels) in enumerate(train_loader, 0):
-            # get the inputs; data is a list of [inputs, labels]
-            if CUDA:
-              inputs = inputs.cuda()
-              labels = labels.cuda()
-            else:
-              inputs = inputs.cpu()
-              labels = labels.cpu()
-
-            x_adv = projected_gradient_descent(net, inputs, labels, loss_fn, num_steps=20,
-                                               step_size=0.02, epsilon=0.3, delta=torch.rand(inputs.shape, device=device))
-
-            # Append the perturbed data for later use in testing
-            if perturbed_data is not None:
-                perturbed_data = torch.cat((perturbed_data, x_adv), 0)
-            else:
-                perturbed_data = x_adv
-
-            # zero the parameter gradients
-            optimizer.zero_grad()
-
-            # forward + backward + optimize
-            reg_outputs = net(inputs)
-            adv_outputs = net(x_adv)
-
-            # Regular loss
-            loss_reg = loss_fn(reg_outputs, labels)
-
-            # Adversarial loss for training
-            loss_adv = loss_fn(adv_outputs, labels)
-            loss_adv.backward()
-            optimizer.step()
-
-            # Aggregate losses
-            running_loss_adv += loss_adv.item()
-            running_loss_reg += loss_reg.item()
-
-        # print statistics
-        print('[epoch%d] regular loss: %.3f' %
-              (epoch + 1, running_loss_reg / len(inputs)))
-        print('[epoch%d] adversarial loss: %.3f' %
-              (epoch + 1, running_loss_adv / len(inputs)))
-
-        with torch.no_grad():
-            # This part calculates the training accuracy and training loss on the original training images
-            correct = 0
-            total = 0
-            for images, labels in train_loader:
-                if CUDA:
-                  images = images.cuda()
-                  labels = labels.cuda()
-                else:
-                  images = images.cpu()
-                  labels =labels.cpu()
-
-                outputs = net(images)
-                _, predicted = torch.max(outputs.data, 1)
-                total += labels.size(0)
-                if CUDA:
-                  correct += (predicted.cpu()==labels.cpu()).sum().item()
-                else:
-                  correct += (predicted==labels).sum().item()
-            Train_Accuracy_Reg = 100 * correct / total;
-
-            # TODO: Fix this adversarial training
-            # # This part calculates the training accuracy and training loss on the perturbed training images
-            # correct = 0
-            # total = 0
-            # images, labels = perturbed_data, trainset.train_labels
-            # if CUDA:
-            #   images = images.cuda()
-            #   labels = labels.cuda()
-            # else:
-            #   images = images.cpu()
-            #   labels =labels.cpu()
-            #
-            # outputs = net(images)
-            # _, predicted = torch.max(outputs.data, 1)
-            # if CUDA:
-            #   correct = (predicted.cpu()==labels.cpu()).sum().item()
-            # else:
-            #   correct = (predicted==labels).sum().item()
-            # Train_Accuracy_Adv = 100 * correct / perturbed_data.shape[0];
-            #
-            epoch_number += [epoch+1]
-            print('Epoch=%d Training Accuracy Regular=%.3f' %
-                      (epoch + 1, Train_Accuracy_Reg))
-            # print('Epoch=%d Training Accuracy Adversarial=%.3f' %
-            #       (epoch + 1, Train_Accuracy_Adv))
-
-        # Record the training losses and accuracies in an array
-        training_loss_regular.append(round(running_loss_reg / len(inputs), 3))
-        training_loss_perturbed.append(round(running_loss_adv / len(inputs), 3))
-        training_accuracy_regular.append(Train_Accuracy_Reg)
-        # TODO: Fix this adversarial training
-        # training_accuracy_perturbed.append(Train_Accuracy_Adv)
-
+    for model, path, setting in zip(models, PATH, pgd_settings):
+        print(f"\n\nTraining model with the following settings\n"
+              f"num_steps={setting.num_steps}, step_size={setting.step_size}, eps={setting.eps}, targeted={setting.targeted}")
+        # We either train the model or load it from memory if it has already been trained
+        if os.path.exists(path):
+            # Load the model
+            model.load_state_dict(torch.load(PATH))
+            model.eval()
+        else:
+            model = train(model, train_loader, CUDA, device, num_steps=setting.num_steps,
+                          step_size=setting.step_size, epsilon=setting.eps, targeted=setting.targeted)
+            # Save the model
+            torch.save(model.state_dict(), path)
     print('Finished Training')
 
-    # Save the model
-    torch.save(net.state_dict(), PATH)
+    # Evaluate the model
+    print("\n\n\n**************Testing Phase**************")
+    print('Finished Testing')
