@@ -31,7 +31,7 @@ class Opt(object):
 
 
 class Generator(nn.Module):
-    def __init__(self, opt, img_shape):
+    def __init__(self, img_shape, opt):
         super(Generator, self).__init__()
 
         def block(in_feat, out_feat, normalize=True):
@@ -40,8 +40,8 @@ class Generator(nn.Module):
                 layers.append(nn.BatchNorm1d(out_feat, 0.8))
             layers.append(nn.LeakyReLU(0.2, inplace=True))
             return layers
-
         self.img_shape = img_shape
+        self.opt = opt
         self.model = nn.Sequential(
             *block(opt.latent_dim, 128, normalize=False),
             *block(128, 256),
@@ -60,8 +60,9 @@ class Generator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self, opt):
         super(Discriminator, self).__init__()
+        self.opt = opt
         self.model = nn.Sequential(
-            nn.Linear(opt.img_size ** 2, 512),
+            nn.Linear(self.opt.img_size ** 2, 512),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(512, 256),
             nn.LeakyReLU(0.2, inplace=True),
