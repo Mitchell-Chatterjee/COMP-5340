@@ -1,5 +1,7 @@
 import numpy as np
+import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class Opt(object):
@@ -64,4 +66,13 @@ class Discriminator(nn.Module):
         img_flat = img.view(img.size(0), -1)
         validity = self.model(img_flat)
         return validity
+
+
+def calculate_jsd(p, q):
+    compare = torch.div(torch.add(p, q), 2)
+
+    temp_1 = 0.5 * F.kl_div(p, compare)
+    temp_2 = 0.5 * F.kl_div(q, compare)
+
+    return temp_1 + temp_2
 
