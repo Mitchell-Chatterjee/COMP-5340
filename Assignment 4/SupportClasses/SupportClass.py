@@ -49,7 +49,7 @@ def download_mnist(train_batch_size=25, test_batch_size=100, num_workers=2):
     """
     transform = torchvision.transforms.Compose(
         [torchvision.transforms.ToTensor(),
-         torchvision.transforms.Normalize((0.1307,), (0.3081,))])
+         torchvision.transforms.Normalize([0.5], [0.5])])
 
     trainset = torchvision.datasets.MNIST(root='./data', train=True,
                                           download=True, transform=transform)
@@ -67,7 +67,7 @@ def create_data_loaders(train_set, test_set):
     :param test_set: The testing data.
     :return:
     """
-    training_loaders = torch.utils.data.DataLoader(train_set, batch_size=25,
+    training_loaders = torch.utils.data.DataLoader(train_set, batch_size=100,
                                                    shuffle=True, num_workers=2)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=100,
                                               shuffle=True, num_workers=2)

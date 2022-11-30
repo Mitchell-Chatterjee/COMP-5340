@@ -3,20 +3,21 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils
 import torch.distributions
-import torchvision
 import numpy as np
-import matplotlib.pyplot as plt;
+import matplotlib.pyplot as plt; plt.rcParams['figure.dpi'] = 200
 
 
 class Decoder(nn.Module):
     def __init__(self, latent_dims):
         super(Decoder, self).__init__()
-        self.linear1 = nn.Linear(latent_dims, 512)
-        self.linear2 = nn.Linear(512, 784)
+        self.linear1 = nn.Linear(latent_dims, 256)
+        self.linear2 = nn.Linear(256, 512)
+        self.linear3 = nn.Linear(512, 784)
 
     def forward(self, z):
         z = F.relu(self.linear1(z))
-        z = torch.sigmoid(self.linear2(z))
+        z = F.relu(self.linear2(z))
+        z = torch.sigmoid(self.linear3(z))
         return z.reshape((-1, 1, 28, 28))
 
 
@@ -24,8 +25,9 @@ class VariationalEncoder(nn.Module):
     def __init__(self, latent_dims):
         super(VariationalEncoder, self).__init__()
         self.linear1 = nn.Linear(784, 512)
-        self.linear2 = nn.Linear(512, latent_dims)
-        self.linear3 = nn.Linear(512, latent_dims)
+        self.linear2 = nn.Linear(512, 256)
+        self.linear3 = nn.Linear(256, latent_dims)
+        self.linear4 = nn.Linear(256, latent_dims)
 
         self.N = torch.distributions.Normal(0, 1)
         self.N.loc = self.N.loc.cuda() # hack to get sampling on the GPU
@@ -35,8 +37,9 @@ class VariationalEncoder(nn.Module):
     def forward(self, x):
         x = torch.flatten(x, start_dim=1)
         x = F.relu(self.linear1(x))
-        mu =  self.linear2(x)
-        sigma = torch.exp(self.linear3(x))
+        x = F.relu(self.linear2(x))
+        mu = self.linear3(x)
+        sigma = torch.exp(self.linear4(x))
         z = mu + sigma*self.N.sample(mu.shape)
         self.kl = (sigma**2 + mu**2 - torch.log(sigma) - 1/2).sum()
         return z
@@ -62,4 +65,4 @@ def plot_reconstructed(autoencoder, device, r0=(-5, 10), r1=(-10, 5), n=12):
             x_hat = autoencoder.decoder(z)
             x_hat = x_hat.reshape(28, 28).to('cpu').detach().numpy()
             img[(n-1-i)*w:(n-1-i+1)*w, j*w:(j+1)*w] = x_hat
-    plt.imshow(img, extent=[*r0, *r1])
+    return img
