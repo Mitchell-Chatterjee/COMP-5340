@@ -1,0 +1,21 @@
+https://openmined.github.io/PySyft/install_tutorials/windows.html
+	- If the `wsl --install` command doesn't work go to this link:
+		https://github.com/MicrosoftDocs/WSL/issues/1054
+
+To activate the conda env use:
+	- conda activate syft_env
+
+If you have Pycharm, this is how to link your WSL environment:
+	- https://www.jetbrains.com/help/pycharm/using-wsl-as-a-remote-interpreter.html#configure-wsl
+
+Ideas:
+	- What about adding noise to bring the data in each device closer to the average as the model converges.
+	- There are no learning algorithms that currently penalize you based on how biased your data is.
+		Weighting the update of a model based on some metric of bias.
+
+	- ***
+		Adding noise for unbalanced datasets using a GAN or VAE or pgd
+
+		Essentially we aggregate the values of each class per dataset and then we train a GAN
+		to generate more data from these datasets which we then add back to the datasets themselves.
+	  ***
